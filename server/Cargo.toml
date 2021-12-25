@@ -1,0 +1,11 @@
+[package]
+name = "rustpress-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-std = { version = "1.10.0", features = ["attributes"] }
+futures = "0.3.19"
+rusqlite = "0.26.3"
+serde = { version = "1.0.132", features = ["derive"] }
+tide = "0.16.0"
