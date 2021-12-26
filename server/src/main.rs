@@ -1,6 +1,5 @@
-use async_std::process::exit;
+use async_std::task;
 use rusqlite::Connection;
-use std::collections::HashMap;
 use std::iter::Iterator;
 use tide::prelude::*;
 
@@ -19,17 +18,29 @@ struct User {
 #[derive(Debug, Serialize, Deserialize)]
 struct Type {
     name: String,
-    fields: HashMap<String, String>,
+    fields: Vec<(String, String)>,
 }
 
 #[async_std::main]
-async fn main() -> tide::Result<()> {
+async fn main() {
+    let mut is_serving = false;
+    let mut is_updated = false;
+    let mut serving;
+
+    loop {
+        if !is_serving {
+            serving = run_server().await;
+            is_serving = true;
+        }
+    }
+}
+
+async fn run_server() -> tide::Result<task::JoinHandle<Result<(), std::io::Error>>> {
     let mut server = tide::new();
     server.at("/").nest(routes_generator().await?);
     server.at("/types").post(types_handler);
-    server.listen("127.0.0.1:3000").await?;
 
-    Ok(())
+    Ok(task::spawn(server.listen("127.0.0.1:3000")))
 }
 
 async fn routes_generator() -> tide::Result<tide::Server<()>> {
@@ -73,19 +84,17 @@ async fn types_handler(mut req: tide::Request<()>) -> tide::Result {
     // Execute query to create table.
     match db.execute(&query, []) {
         Ok(_) => {}
-        Err(e) => println!("{:?}", e),
+        Err(e) => eprintln!("{:?}", e),
     };
 
     Ok(query.into())
 }
 
 fn get_database() -> Connection {
+    // Open/create a database.
     let database = match Connection::open("rustpress.db") {
         Ok(db) => db,
-        Err(e) => {
-            println!("{:?}", e);
-            exit(1);
-        }
+        Err(e) => panic!("{:?}", e),
     };
 
     database
