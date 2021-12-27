@@ -1,19 +1,9 @@
-use async_std::task;
+use async_std::{channel, task};
+use futures::future::{AbortHandle, Abortable};
+use lazy_static::lazy_static;
 use rusqlite::Connection;
 use std::iter::Iterator;
 use tide::prelude::*;
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Post {
-    id: i32,
-    title: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct User {
-    id: i32,
-    name: String,
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Type {
@@ -21,26 +11,50 @@ struct Type {
     fields: Vec<(String, String)>,
 }
 
+lazy_static! {
+    static ref MSG: (
+        async_std::channel::Sender<&'static str>,
+        async_std::channel::Receiver<&'static str>,
+    ) = channel::unbounded::<&str>();
+}
+
 #[async_std::main]
 async fn main() {
-    let mut is_serving = false;
-    let mut is_updated = false;
-    let mut serving;
+    let sender = &MSG.0;
+    let receiver = &MSG.1;
 
-    loop {
-        if !is_serving {
-            serving = run_server().await;
-            is_serving = true;
+    let mut abort_handles = Vec::new();
+
+    sender.send("START").await.unwrap();
+
+    while let Ok(received) = receiver.recv().await {
+        match received {
+            "START" => {
+                println!("In Start");
+                let (handle, registration) = AbortHandle::new_pair();
+                abort_handles.push(handle);
+                task::spawn(Abortable::new(run_server(), registration));
+            }
+            "RESTART" => {
+                println!("In Restart");
+                for handle in abort_handles.drain(..) {
+                    handle.abort();
+                }
+                sender.send("START").await.unwrap();
+            }
+            _ => {}
         }
     }
 }
 
-async fn run_server() -> tide::Result<task::JoinHandle<Result<(), std::io::Error>>> {
+async fn run_server() -> tide::Result<()> {
     let mut server = tide::new();
     server.at("/").nest(routes_generator().await?);
     server.at("/types").post(types_handler);
 
-    Ok(task::spawn(server.listen("127.0.0.1:3000")))
+    server.listen("127.0.0.1:3000").await?;
+
+    Ok(())
 }
 
 async fn routes_generator() -> tide::Result<tide::Server<()>> {
@@ -65,6 +79,8 @@ async fn unkown_handler(mut _req: tide::Request<()>) -> tide::Result {
 }
 
 async fn types_handler(mut req: tide::Request<()>) -> tide::Result {
+    let sender = &MSG.0;
+
     let db = get_database();
 
     let Type { name, fields } = req.body_json().await?;
@@ -74,18 +90,20 @@ async fn types_handler(mut req: tide::Request<()>) -> tide::Result {
     let mut fields = fields.iter().peekable();
     while let Some((key, value)) = fields.next() {
         if fields.peek().is_none() {
-            query.push_str(format!("{}\t{}\n", key, value).as_str());
+            query.push_str(format!("\t{}\t{}\n)", key, value).as_str());
         } else {
-            query.push_str(format!("{}\t{},\n", key, value).as_str());
+            query.push_str(format!("\t{}\t{},\n", key, value).as_str());
         }
     }
-    query.push_str(")");
 
     // Execute query to create table.
     match db.execute(&query, []) {
         Ok(_) => {}
         Err(e) => eprintln!("{:?}", e),
     };
+
+    // Restart the server to add new endpoints.
+    sender.send("RESTART").await.unwrap();
 
     Ok(query.into())
 }
