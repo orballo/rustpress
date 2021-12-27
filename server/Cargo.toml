@@ -7,6 +7,10 @@ edition = "2021"
 async-std = { version = "1.10.0", features = ["attributes"] }
 futures = "0.3.19"
 lazy_static = "1.4.0"
-rusqlite = "0.26.3"
 serde = { version = "1.0.132", features = ["derive"] }
+sqlx = { version = "0.5.9", features = [
+    "runtime-async-std-native-tls",
+    "sqlite",
+    "macros",
+] }
 tide = "0.16.0"
