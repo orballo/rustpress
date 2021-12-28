@@ -69,7 +69,8 @@ async fn main() {
 
 async fn get_database() -> SqlitePool {
     let db_url =
-        &std::env::var("DATABASE_URL").expect("The env variable DATABASE_URL needs to exist.");
+        std::env::var("DATABASE_URL").expect("The env variable DATABASE_URL needs to exist.");
+
     let db = SqlitePool::connect(&db_url).await.unwrap();
 
     sqlx::query(

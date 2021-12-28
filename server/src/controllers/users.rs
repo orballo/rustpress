@@ -44,6 +44,18 @@ impl User {
     }
 
     pub async fn list_users(req: tide::Request<State>) -> tide::Result {
-        unimplemented!()
+        let db = req.state().db.clone();
+
+        let users: Vec<User> = sqlx::query_as(
+            "
+            SELECT * FROM users
+            ",
+        )
+        .fetch_all(&db)
+        .await?;
+
+        let mut res = tide::Response::new(200);
+        res.set_body(tide::Body::from_json(&users)?);
+        Ok(res)
     }
 }
