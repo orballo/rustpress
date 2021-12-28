@@ -22,6 +22,9 @@ pub struct State {
 
 #[async_std::main]
 async fn main() {
+    // Set enviromental variables.
+    dotenv::dotenv().ok();
+
     // Setup logging.
     tide::log::start();
 
@@ -65,14 +68,14 @@ async fn main() {
 }
 
 async fn get_database() -> SqlitePool {
-    let db = SqlitePool::connect("sqlite://rustpress.db?mode=rwc")
-        .await
-        .unwrap();
+    let db_url =
+        &std::env::var("DATABASE_URL").expect("The env variable DATABASE_URL needs to exist.");
+    let db = SqlitePool::connect(&db_url).await.unwrap();
 
     sqlx::query(
         "
         CREATE TABLE IF NOT EXISTS users (
-            id          INT PRIMARY KEY,
+            id          INTEGER PRIMARY KEY,
             username    TEXT NOT NULL UNIQUE,
             password    TEXT NOT NULL
         )

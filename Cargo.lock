@@ -1630,6 +1630,7 @@ name = "rustpress-server"
 version = "0.1.0"
 dependencies = [
  "async-std",
+ "dotenv",
  "futures",
  "lazy_static",
  "serde",

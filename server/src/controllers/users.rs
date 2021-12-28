@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 
-use crate::errors::RestError;
 use crate::State;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct User {
     id: Option<i32>,
     username: String,
@@ -12,41 +12,24 @@ pub struct User {
 
 impl User {
     pub async fn create_user(mut req: tide::Request<State>) -> tide::Result {
-        let user: User = req.body_json().await?;
+        let payload: User = req.body_json().await?;
         let db = req.state().db.clone();
 
-        let result = sqlx::query(
+        let user: User = sqlx::query_as(
             "
             INSERT INTO users (username, password)
-            VALUES (?, ?)
+            VALUES ($1, $2)
+            RETURNING id, username, password
             ",
         )
-        .bind(user.username)
-        .bind(user.password)
-        .execute(&db)
-        .await;
+        .bind(payload.username)
+        .bind(payload.password)
+        .fetch_one(&db)
+        .await?;
 
-        match result {
-            Ok(_) => Ok(tide::Response::new(201)),
-            Err(e) => Ok(match e {
-                sqlx::Error::Database(e) => {
-                    if e.message() == "UNIQUE constraint failed: users.username" {
-                        let mut res = tide::Response::new(409);
-
-                        let body = RestError {
-                            code: 409,
-                            message: String::from("Username already exists"),
-                        };
-                        res.set_body(tide::Body::from_json(&body).unwrap());
-
-                        res
-                    } else {
-                        tide::Response::new(500)
-                    }
-                }
-                _ => tide::Response::new(500),
-            }),
-        }
+        let mut res = tide::Response::new(201);
+        res.set_body(tide::Body::from_json(&user)?);
+        Ok(res)
     }
 
     pub async fn get_user(req: tide::Request<State>) -> tide::Result {

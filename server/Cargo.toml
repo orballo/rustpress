@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 async-std = { version = "1.10.0", features = ["attributes"] }
+dotenv = "0.15.0"
 futures = "0.3.19"
 lazy_static = "1.4.0"
 serde = { version = "1.0.132", features = ["derive"] }
