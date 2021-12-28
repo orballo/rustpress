@@ -2,10 +2,9 @@ use async_std::{channel, task};
 use futures::future::{AbortHandle, Abortable};
 use lazy_static::lazy_static;
 use sqlx::sqlite::SqlitePool;
-use std::iter::Iterator;
-use tide::prelude::*;
 
 mod controllers;
+mod errors;
 
 use controllers::users::User;
 
@@ -23,14 +22,18 @@ pub struct State {
 
 #[async_std::main]
 async fn main() {
+    // Setup logging.
     tide::log::start();
 
+    // Setup messaging system.
     let sender = &MSG.0;
     let receiver = &MSG.1;
 
+    // Add database to state.
     let db = get_database().await;
     let state = State { db };
 
+    // Store abortable tasks.
     let mut abort_handles = Vec::new();
 
     sender.send("START").await.unwrap();
@@ -49,6 +52,7 @@ async fn main() {
                 ));
             }
             "RESTART" => {
+                // Stop all the tasks.
                 for handle in abort_handles.drain(..) {
                     handle.abort();
                 }
@@ -69,7 +73,7 @@ async fn get_database() -> SqlitePool {
         "
         CREATE TABLE IF NOT EXISTS users (
             id          INT PRIMARY KEY,
-            username    TEXT NOT NULL,
+            username    TEXT NOT NULL UNIQUE,
             password    TEXT NOT NULL
         )
         ",
@@ -89,6 +93,10 @@ async fn get_server(state: State) -> tide::Server<State> {
     server
         .at("/users")
         .post(User::create_user)
+        .get(User::list_users);
+
+    server
+        .at("/users/:id")
         .get(User::get_user)
         .put(User::update_user)
         .delete(User::delete_user);
